@@ -18,16 +18,18 @@ public class DispatcherServiceTest {
 	@Before
 	public void init() {
     	org.apache.log4j.BasicConfigurator.configure();
-		dispatcherService = new DispatcherService(2);
+    	//Se le pasan dos segundos de espera para un llamado
+    	//maximo 10 llamados
+		dispatcherService = new DispatcherService(2 , 10);
 	}
 
 	@Test
 	public void calls() throws InterruptedException {
 		prepareCallOperator();
 		
-		for (int i = 0; i < 12; i++) {
+		for (int i = 0; i < 15; i++) {
 			dispatcherService.dispatchCall(new Call(new Date() , i));
-			Thread.sleep(1000);
+			//Thread.sleep(1000);
 		}
 
 		Thread.sleep(1000);
@@ -48,7 +50,7 @@ public class DispatcherServiceTest {
 		Thread.sleep(1000);
 	}
 	
-	@Test
+	//@Test
 	public void callWithoutOperator() throws InterruptedException {
 		dispatcherService.dispatchCall(new Call(new Date(), 20));
 		Thread.sleep(10000);

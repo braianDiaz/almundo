@@ -31,6 +31,8 @@ public class DispatcherService extends TimerTask implements Listener {
 	final static Logger logger = Logger.getLogger(DispatcherService.class);
 	
 	private long callTimerConfigurationInSeconds;
+	private int callLimit ;
+	private int numberActiveCalls =  0;
 	
 	//Cola de llamadas
 	Queue<Call> calls =  new LinkedBlockingQueue<Call>();
@@ -49,8 +51,9 @@ public class DispatcherService extends TimerTask implements Listener {
 	 * 
 	 * @param callTimerConfigurationInSeconds para saber cuanto tiempo pueden estar en espera una llamada en segundos
 	 */
-	public DispatcherService(long callTimerConfigurationInSeconds) {
+	public DispatcherService(long callTimerConfigurationInSeconds , int callLimit) {
 		this.callTimerConfigurationInSeconds = callTimerConfigurationInSeconds;
+		this.callLimit  = callLimit;
 		Timer time = new Timer(); 
 		//Tarea para chequear si hay llamadas en espera 
 		time.schedule(this, 0, 1000);
@@ -64,7 +67,7 @@ public class DispatcherService extends TimerTask implements Listener {
     public void dispatchCall(Call call){
     	//si la cola de empleados esta vacia se almacena la llamada por X cantidad
     	//de tiempo
-        if(callOperators.isEmpty()){
+        if(callOperators.isEmpty() || this.numberActiveCalls > this.callLimit){
             calls.offer(call);
         }else{
         	//sino chequea la cantidad de llamadas atendidas en el momento
@@ -83,17 +86,16 @@ public class DispatcherService extends TimerTask implements Listener {
      * @return si se agrego o uno el nuevo operador
      */
 	public boolean addCallOperator(CallOperator callOperator){
-		if(callOperators.offer( callOperator  )){
-			if(!calls.isEmpty()){
-				Call call = calls.poll();
+		if(this.callOperators.offer( callOperator  )){
+			if(!this.calls.isEmpty()  && this.numberActiveCalls < this.callLimit){
+				Call call = this.calls.poll();
 				if(CALL_STATUS.ON_HOLD.equals(call.getCallStatus())){
-					takeCall( callOperators.poll() , call);
+					takeCall( this.callOperators.poll() , call);
 				}
 			}
 			
 			return true;		
 		}
-		
 		return false;
 	}
 
@@ -106,6 +108,7 @@ public class DispatcherService extends TimerTask implements Listener {
 	 */
 	private void takeCall(CallOperator callOperator , Call  call) {
 		//Ejecuta la llamada en un hilo aparte , para soportar concurrencia
+		this.numberActiveCalls ++ ;
 		ExecutorService es = Executors.newSingleThreadExecutor();
 		es.submit(new CallService(this , callOperator , call ));
 	}
@@ -116,12 +119,12 @@ public class DispatcherService extends TimerTask implements Listener {
 	 *  @param callOperator
 	 */
 	public void callTermination(CallOperator callOperator) {
+		this.numberActiveCalls -- ;
 		addCallOperator( callOperator );
 	}
 
 	private void checkCalls() {
 		List<Call> callsRemove = new ArrayList<Call>();
-		
 		for (Call call : calls) {
 			if(DateUtils.getDateDiff(call.getTimeEntry(), new Date()) > callTimerConfigurationInSeconds){
 				call.setCallStatus(CALL_STATUS.CANCELED);
@@ -129,7 +132,6 @@ public class DispatcherService extends TimerTask implements Listener {
 				callsRemove.add(call);
 			}
 		}
-		
 		calls.removeAll(callsRemove);
 	}
 
@@ -138,8 +140,5 @@ public class DispatcherService extends TimerTask implements Listener {
 	public void run() {
 		logger.info("Chequeando llamadas en esperas");
 		checkCalls();
-	}
-
-	
-	
+	}	
 }
